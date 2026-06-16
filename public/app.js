@@ -559,6 +559,9 @@ function itemInputs(element) {
 }
 
 function matchesMultiFilter(value, selected) {
+  if (typeof selected === "string") {
+    return selected === "all" || value === selected;
+  }
   return selected.length === 0 || selected.includes(value);
 }
 
@@ -640,9 +643,12 @@ function stepMatchesFilters(step, filters) {
   if (!matchesMultiFilter(step.product, filters.product)) return false;
   if (!matchesMultiFilter(step.resourceSectorId, filters.sector)) return false;
   if (!matchesMultiFilter(step.operation, filters.operation)) return false;
-  if (filters.conflict.length > 0) {
+  if (Array.isArray(filters.conflict) && filters.conflict.length > 0) {
     const isConflict = step.hasConflict ? "conflict" : "clear";
     if (!filters.conflict.includes(isConflict)) return false;
+  } else if (typeof filters.conflict === "string") {
+    if (filters.conflict === "conflict" && !step.hasConflict) return false;
+    if (filters.conflict === "clear" && step.hasConflict) return false;
   }
   if (filters.fromTime && step.end < filters.fromTime) return false;
   if (filters.toTime && step.start > filters.toTime) return false;
