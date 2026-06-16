@@ -61,10 +61,18 @@ select {
   margin: 6px 0 0;
 }
 
+.snapshot-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+
 .actions {
   align-items: center;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 button {
@@ -97,6 +105,14 @@ button:disabled {
 
 .secondary-button {
   align-self: end;
+}
+
+.snap-field {
+  min-width: 320px;
+}
+
+.snap-field input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 .analysis-toolbar .secondary-button {
@@ -251,6 +267,110 @@ button:disabled {
   height: 12px;
   margin: 0;
   width: 12px;
+}
+
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+
+.multi-select summary {
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  min-height: 38px;
+  padding: 0 34px 0 10px;
+  position: relative;
+}
+
+.multi-select summary::-webkit-details-marker {
+  display: none;
+}
+
+.multi-select summary::after {
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--muted);
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  top: 16px;
+}
+
+.multi-select[open] summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.multi-summary {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-panel {
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-top: 0;
+  border-bottom-left-radius: 7px;
+  border-bottom-right-radius: 7px;
+  box-shadow: 0 12px 22px rgba(16, 24, 32, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  left: 0;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% - 1px);
+  width: min(100%, 320px);
+  z-index: 20;
+}
+
+.multi-search {
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  font: inherit;
+  height: 34px;
+  outline: none;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.multi-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 108, 106, 0.16);
+}
+
+.multi-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.multi-option {
+  align-items: center;
+  background: #fbfcfc;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  font-size: 0.82rem;
+  gap: 8px;
+  line-height: 1.2;
+  min-height: 30px;
+  padding: 5px 8px;
+  width: 100%;
+  white-space: normal;
 }
 
 .field input:focus,
@@ -747,6 +867,10 @@ button:disabled {
   .actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .snap-field {
+    min-width: 0;
   }
 
   .metrics,

@@ -16,6 +16,7 @@ const palette = [
 
 const state = {
   snapshot: null,
+  snapId: "",
   resources: new Map(),
   sectorEquipmentTotals: new Map(),
   routesByPackref: new Map(),
@@ -44,6 +45,8 @@ const elements = {
   scheduleView: document.querySelector("#scheduleView"),
   analysisView: document.querySelector("#analysisView"),
   snapshotName: document.querySelector("#snapshotName"),
+  snapshotIdDisplay: document.querySelector("#snapshotIdDisplay"),
+  snapIdInput: document.querySelector("#snapIdInput"),
   metricOrders: document.querySelector("#metricOrders"),
   metricSteps: document.querySelector("#metricSteps"),
   metricRange: document.querySelector("#metricRange"),
@@ -202,6 +205,28 @@ function escapeCsv(value) {
   const text = String(value ?? "");
   if (!/[",\n;]/.test(text)) return text;
   return `"${text.replaceAll('"', '""')}"`;
+}
+
+function shortSnapId(value) {
+  const text = String(value || "");
+  if (text.length <= 18) return text;
+  return `${text.slice(0, 8)}...${text.slice(-6)}`;
+}
+
+function syncSnapUi(snapId) {
+  state.snapId = snapId || "";
+  if (elements.snapIdInput) elements.snapIdInput.value = state.snapId;
+  if (elements.snapshotIdDisplay) {
+    elements.snapshotIdDisplay.textContent = `SNAP: ${shortSnapId(state.snapId) || "sem valor"}`;
+  }
+}
+
+function updateSnapshotName(payload, items) {
+  elements.snapshotName.textContent = `${payload?.metadata?.name || "Snap"} | ${items.length.toLocaleString(
+    "pt-BR"
+  )} processos em ${state.machineGroups.length.toLocaleString("pt-BR")} equipamentos | SNAP ${shortSnapId(
+    state.snapId || payload?._id || ""
+  )}`;
 }
 
 function colorFor(value) {
@@ -455,8 +480,33 @@ function updateMultiSelectSummary(element, allLabel) {
   summary.textContent = selected.length === 1 ? element.querySelector(`input[value="${CSS.escape(selected[0])}"]`)?.dataset.label || selected[0] : `${selected.length} selecionados`;
 }
 
+function filterMultiSelectOptions(element, query) {
+  const normalized = query.trim().toLowerCase();
+  const options = [...element.querySelectorAll(".multi-option")];
+  options.forEach((option) => {
+    if (option.dataset.value === "all") {
+      option.hidden = false;
+      return;
+    }
+    const label = option.dataset.label || "";
+    option.hidden = normalized.length > 0 && !label.toLowerCase().includes(normalized);
+  });
+}
+
+function syncMultiSelectState(element, allLabel) {
+  const allInput = element.querySelector('input[value="all"]');
+  const itemInputs = [...element.querySelectorAll('.multi-option input[type="checkbox"]')].filter(
+    (input) => input.value !== "all"
+  );
+  const selected = itemInputs.filter((input) => input.checked);
+
+  if (allInput) allInput.checked = selected.length === 0;
+  updateMultiSelectSummary(element, allLabel);
+}
+
 function fillMultiSelect(element, values, allLabel) {
   const selectedValues = new Set(getMultiSelectValues(element));
+  const search = element.querySelector(".multi-search");
   const options = element.querySelector(".multi-options");
   const fragment = document.createDocumentFragment();
   const allOption = [{ value: "all", label: allLabel }, ...values];
@@ -464,6 +514,8 @@ function fillMultiSelect(element, values, allLabel) {
   allOption.forEach(({ value, label }) => {
     const item = document.createElement("label");
     item.className = "multi-option";
+    item.dataset.value = value;
+    item.dataset.label = label;
     const input = document.createElement("input");
     input.type = "checkbox";
     input.value = value;
@@ -474,13 +526,36 @@ function fillMultiSelect(element, values, allLabel) {
   });
 
   options.replaceChildren(fragment);
-  updateMultiSelectSummary(element, allLabel);
+  if (search) {
+    search.value = "";
+    search.oninput = () => filterMultiSelectOptions(element, search.value);
+  }
+  options.onchange = (event) => {
+    const input = event.target.closest('input[type="checkbox"]');
+    if (!input) return;
+    if (input.value === "all" && input.checked) {
+      itemInputs(element).forEach((checkbox) => {
+        if (checkbox.value !== "all") checkbox.checked = false;
+      });
+    } else if (input.value !== "all" && input.checked) {
+      const allInput = element.querySelector('input[value="all"]');
+      if (allInput) allInput.checked = false;
+    }
+    syncMultiSelectState(element, allLabel);
+    renderAnalysis();
+  };
+  filterMultiSelectOptions(element, "");
+  syncMultiSelectState(element, allLabel);
 }
 
 function getMultiSelectValues(element) {
   return [...element.querySelectorAll('input[type="checkbox"]:checked')]
     .map((input) => input.value)
     .filter((value) => value !== "all");
+}
+
+function itemInputs(element) {
+  return [...element.querySelectorAll('.multi-option input[type="checkbox"]')];
 }
 
 function matchesMultiFilter(value, selected) {
@@ -560,13 +635,15 @@ function updateMetrics(machines, steps) {
 }
 
 function stepMatchesFilters(step, filters) {
-  if (filters.type !== "all" && step.type !== filters.type) return false;
-  if (filters.packref !== "all" && step.packref !== filters.packref) return false;
-  if (filters.product !== "all" && step.product !== filters.product) return false;
-  if (filters.sector !== "all" && step.resourceSectorId !== filters.sector) return false;
-  if (filters.operation !== "all" && step.operation !== filters.operation) return false;
-  if (filters.conflict === "conflict" && !step.hasConflict) return false;
-  if (filters.conflict === "clear" && step.hasConflict) return false;
+  if (!matchesMultiFilter(step.type, filters.type)) return false;
+  if (!matchesMultiFilter(step.packref, filters.packref)) return false;
+  if (!matchesMultiFilter(step.product, filters.product)) return false;
+  if (!matchesMultiFilter(step.resourceSectorId, filters.sector)) return false;
+  if (!matchesMultiFilter(step.operation, filters.operation)) return false;
+  if (filters.conflict.length > 0) {
+    const isConflict = step.hasConflict ? "conflict" : "clear";
+    if (!filters.conflict.includes(isConflict)) return false;
+  }
   if (filters.fromTime && step.end < filters.fromTime) return false;
   if (filters.toTime && step.start > filters.toTime) return false;
   return true;
@@ -830,12 +907,12 @@ function getAnalysisDimensionValue(step, dimension) {
 
 function getAnalysisFilters() {
   return {
-    type: elements.analysisTypeFilter.value,
-    packref: elements.analysisPackrefFilter.value,
-    product: elements.analysisProductFilter.value,
-    sector: elements.analysisSectorFilter.value,
-    operation: elements.analysisOperationFilter.value,
-    conflict: elements.analysisConflictFilter.value,
+    type: getMultiSelectValues(elements.analysisTypeFilter),
+    packref: getMultiSelectValues(elements.analysisPackrefFilter),
+    product: getMultiSelectValues(elements.analysisProductFilter),
+    sector: getMultiSelectValues(elements.analysisSectorFilter),
+    operation: getMultiSelectValues(elements.analysisOperationFilter),
+    conflict: getMultiSelectValues(elements.analysisConflictFilter),
     fromTime: parseDateInput(elements.analysisFromDateInput.value),
     toTime: parseDateInput(elements.analysisToDateInput.value, true)
   };
@@ -1414,14 +1491,26 @@ function render({ resetScroll = false } = {}) {
   renderVirtualRows({ force: true });
 }
 
-async function loadData() {
+async function loadConfig() {
+  const response = await fetch("/api/config", { headers: { accept: "application/json" } });
+  if (!response.ok) throw new Error(`API de configuracao retornou HTTP ${response.status}`);
+  return response.json();
+}
+
+async function loadData(snapId = state.snapId) {
   setVisibility({ loading: true });
   setAnalysisVisibility({ loading: true });
   elements.refreshButton.disabled = true;
 
   try {
+    const currentSnapId = String(snapId || "").trim();
+    if (currentSnapId) syncSnapUi(currentSnapId);
+
     const [snapResponse, resourceResponse] = await Promise.all([
-      fetch("/api/snap?page=1&size=9999", { headers: { accept: "application/json" } }),
+      fetch(
+        `/api/snap?page=1&size=9999${currentSnapId ? `&snapId=${encodeURIComponent(currentSnapId)}` : ""}`,
+        { headers: { accept: "application/json" } }
+      ),
       fetch("/api/resources", { headers: { accept: "application/json" } })
     ]);
     if (!snapResponse.ok) throw new Error(`API de agenda retornou HTTP ${snapResponse.status}`);
@@ -1444,9 +1533,8 @@ async function loadData() {
     state.viewMinTime = state.minTime;
     state.viewMaxTime = state.maxTime;
 
-    elements.snapshotName.textContent = `${payload?.metadata?.name || "Snap"} | ${items.length.toLocaleString(
-      "pt-BR"
-    )} processos em ${state.machineGroups.length.toLocaleString("pt-BR")} equipamentos`;
+    syncSnapUi(currentSnapId || payload?._id || state.snapId);
+    updateSnapshotName(payload, items);
 
     setupFilterOptions(items, state.machineGroups);
     applyFilters();
@@ -1489,12 +1577,6 @@ elements.analysisSearchInput.addEventListener("input", debouncedAnalysis);
   elements.analysisRowSelect,
   elements.analysisColumnSelect,
   elements.analysisMeasureSelect,
-  elements.analysisTypeFilter,
-  elements.analysisSectorFilter,
-  elements.analysisPackrefFilter,
-  elements.analysisProductFilter,
-  elements.analysisOperationFilter,
-  elements.analysisConflictFilter,
   elements.analysisFromDateInput,
   elements.analysisToDateInput,
   elements.analysisSortSelect,
@@ -1505,7 +1587,14 @@ elements.analysisExportButton.addEventListener("click", exportAnalysisCsv);
 elements.visibleDaysSelect.addEventListener("change", () => {
   render({ resetScroll: false });
 });
-elements.refreshButton.addEventListener("click", loadData);
+elements.snapIdInput.addEventListener("input", (event) => {
+  syncSnapUi(event.target.value.trim());
+});
+elements.snapIdInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  loadData(elements.snapIdInput.value.trim());
+});
+elements.refreshButton.addEventListener("click", () => loadData(elements.snapIdInput.value.trim()));
 elements.gantt.addEventListener("scroll", () => {
   if (state.scrollFrame) return;
   state.scrollFrame = window.requestAnimationFrame(() => {
@@ -1557,4 +1646,12 @@ window.addEventListener(
   }, 120)
 );
 
-loadData();
+loadConfig()
+  .then((config) => {
+    syncSnapUi(config.snapId || "");
+    return loadData(config.snapId);
+  })
+  .catch(() => {
+    syncSnapUi("");
+    loadData();
+  });

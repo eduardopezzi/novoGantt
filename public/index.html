@@ -12,8 +12,13 @@
         <div class="title-block">
           <h1>Sequenciamento de Produção</h1>
           <p id="snapshotName">Carregando agenda...</p>
+          <p id="snapshotIdDisplay" class="snapshot-id">SNAP: carregando...</p>
         </div>
         <div class="actions">
+          <label class="field snap-field">
+            <span>Snapshot</span>
+            <input id="snapIdInput" type="text" spellcheck="false" autocomplete="off" />
+          </label>
           <button id="scheduleViewButton" class="view-button is-active" type="button">Cronograma</button>
           <button id="analysisViewButton" class="view-button" type="button">Analise</button>
           <button id="refreshButton" type="button">Atualizar</button>
@@ -209,42 +214,60 @@
             <span>Tipo</span>
             <details id="analysisTypeFilter" class="multi-select">
               <summary><span class="multi-summary">Todos</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <div class="field">
             <span>Setor</span>
             <details id="analysisSectorFilter" class="multi-select">
               <summary><span class="multi-summary">Todos</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <div class="field">
             <span>Packref</span>
             <details id="analysisPackrefFilter" class="multi-select">
               <summary><span class="multi-summary">Todos</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <div class="field">
             <span>Produto</span>
             <details id="analysisProductFilter" class="multi-select">
               <summary><span class="multi-summary">Todos</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <div class="field">
             <span>Operacao</span>
             <details id="analysisOperationFilter" class="multi-select">
               <summary><span class="multi-summary">Todas</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <div class="field">
             <span>Conflito</span>
             <details id="analysisConflictFilter" class="multi-select">
               <summary><span class="multi-summary">Todos</span></summary>
-              <div class="multi-options"></div>
+              <div class="multi-panel">
+                <input class="multi-search" type="search" placeholder="Buscar..." />
+                <div class="multi-options"></div>
+              </div>
             </details>
           </div>
           <label class="field">

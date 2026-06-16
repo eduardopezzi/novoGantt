@@ -31,7 +31,8 @@ async function proxySnap(req, res) {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
   const page = requestUrl.searchParams.get("page") || "1";
   const size = requestUrl.searchParams.get("size") || "9999";
-  const upstream = `${API_BASE}/snaps/${SNAP_ID}?page=${encodeURIComponent(page)}&size=${encodeURIComponent(size)}`;
+  const snapId = requestUrl.searchParams.get("snapId") || SNAP_ID;
+  const upstream = `${API_BASE}/snaps/${encodeURIComponent(snapId)}?page=${encodeURIComponent(page)}&size=${encodeURIComponent(size)}`;
 
   try {
     const response = await fetch(upstream, {
@@ -56,6 +57,18 @@ async function proxySnap(req, res) {
       "application/json; charset=utf-8"
     );
   }
+}
+
+async function proxyConfig(_req, res) {
+  send(
+    res,
+    200,
+    JSON.stringify({
+      snapId: SNAP_ID,
+      apiBase: API_BASE
+    }),
+    "application/json; charset=utf-8"
+  );
 }
 
 async function proxyResources(_req, res) {
@@ -106,6 +119,11 @@ async function serveStatic(req, res) {
 }
 
 createServer((req, res) => {
+  if (req.url?.startsWith("/api/config")) {
+    proxyConfig(req, res);
+    return;
+  }
+
   if (req.url?.startsWith("/api/snap")) {
     proxySnap(req, res);
     return;
