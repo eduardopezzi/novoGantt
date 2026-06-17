@@ -749,6 +749,34 @@ button:disabled {
   min-height: 420px;
 }
 
+.analysis-tabs {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid var(--line-strong);
+  display: flex;
+  gap: 6px;
+  min-height: 46px;
+  padding: 8px 10px 0;
+}
+
+.analysis-tab {
+  background: #f7f9f9;
+  border: 1px solid var(--line-strong);
+  border-bottom-color: transparent;
+  border-radius: 7px 7px 0 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 760;
+  min-height: 34px;
+}
+
+.analysis-tab.is-active {
+  background: #eef3f4;
+  border-color: var(--line-strong);
+  border-bottom-color: #eef3f4;
+  color: var(--accent);
+}
+
 .analysis-caption {
   align-items: center;
   background: #eef3f4;
@@ -854,6 +882,33 @@ button:disabled {
   color: #a2adb6;
 }
 
+.operations-table th,
+.operations-table td {
+  min-width: 142px;
+  text-align: left;
+}
+
+.operations-table th:first-child,
+.operations-table td:first-child {
+  min-width: 220px;
+}
+
+.operations-table th {
+  background: #b3afaf;
+  color: #080808;
+  font-size: 0.94rem;
+  text-align: center;
+}
+
+.operations-table td.is-numeric {
+  text-align: right;
+}
+
+.operations-table tfoot td:first-child {
+  min-width: 100%;
+  text-align: left;
+}
+
 @media (max-width: 920px) {
   :root {
     --label-width: 230px;
@@ -898,6 +953,16 @@ button:disabled {
 
   .pivot-scroll {
     height: calc(100vh - 420px);
+  }
+
+  .analysis-tabs {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 8px;
+  }
+
+  .analysis-tab {
+    border-radius: 7px;
   }
 }
 

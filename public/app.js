@@ -17,12 +17,16 @@ const palette = [
 const state = {
   snapshot: null,
   snapId: "",
+  snapshots: [],
   resources: new Map(),
   sectorEquipmentTotals: new Map(),
   routesByPackref: new Map(),
   items: [],
   activeView: "schedule",
+  activeAnalysisResult: "pivot",
   analysisExport: null,
+  analysisPivotExport: null,
+  analysisOperationsExport: null,
   machineGroups: [],
   filteredMachines: [],
   rows: [],
@@ -46,7 +50,7 @@ const elements = {
   analysisView: document.querySelector("#analysisView"),
   snapshotName: document.querySelector("#snapshotName"),
   snapshotIdDisplay: document.querySelector("#snapshotIdDisplay"),
-  snapIdInput: document.querySelector("#snapIdInput"),
+  snapSelect: document.querySelector("#snapSelect"),
   metricOrders: document.querySelector("#metricOrders"),
   metricSteps: document.querySelector("#metricSteps"),
   metricRange: document.querySelector("#metricRange"),
@@ -96,7 +100,12 @@ const elements = {
   analysisEmptyState: document.querySelector("#analysisEmptyState"),
   analysisResult: document.querySelector("#analysisResult"),
   analysisCaption: document.querySelector("#analysisCaption"),
-  pivotTable: document.querySelector("#pivotTable")
+  analysisPivotTabButton: document.querySelector("#analysisPivotTabButton"),
+  analysisOperationsTabButton: document.querySelector("#analysisOperationsTabButton"),
+  pivotResult: document.querySelector("#pivotResult"),
+  operationsResult: document.querySelector("#operationsResult"),
+  pivotTable: document.querySelector("#pivotTable"),
+  operationsTable: document.querySelector("#operationsTable")
 };
 
 const dateShort = new Intl.DateTimeFormat("pt-BR", {
@@ -114,6 +123,11 @@ const dateTime = new Intl.DateTimeFormat("pt-BR", {
   year: "numeric",
   hour: "2-digit",
   minute: "2-digit"
+});
+const timeOnly = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit"
 });
 
 const analysisDimensionLabels = {
@@ -175,6 +189,15 @@ function formatDuration(ms) {
   return `${days.toFixed(days < 10 ? 1 : 0)}d`;
 }
 
+function formatDurationClock(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "00:00:00";
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
 function formatType(value) {
   if (value === "production") return "Producao";
   if (value === "packaging") return "Embalagem";
@@ -215,10 +238,44 @@ function shortSnapId(value) {
 
 function syncSnapUi(snapId) {
   state.snapId = snapId || "";
-  if (elements.snapIdInput) elements.snapIdInput.value = state.snapId;
+  if (elements.snapSelect) elements.snapSelect.value = state.snapId;
   if (elements.snapshotIdDisplay) {
     elements.snapshotIdDisplay.textContent = `SNAP: ${shortSnapId(state.snapId) || "sem valor"}`;
   }
+}
+
+function formatSnapLabel(snap) {
+  const name = snap?.metadata?.name || "Sem nome";
+  const status = snap?.status || "";
+  const updated = snap?.updated || snap?.created || 0;
+  const statusPart = status ? ` (${status})` : "";
+  const datePart = updated ? ` - ${dateTime.format(new Date(updated))}` : "";
+  return `${name}${statusPart}${datePart}`;
+}
+
+async function loadSnaps() {
+  const response = await fetch("/api/snaps", { headers: { accept: "application/json" } });
+  if (!response.ok) throw new Error(`API de lista de snapshots retornou HTTP ${response.status}`);
+  return response.json();
+}
+
+function fillSnapSelect(snaps, selectedId = "") {
+  const sorted = [...snaps].sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0));
+  state.snapshots = sorted;
+  const fragment = document.createDocumentFragment();
+  sorted.forEach((snap) => {
+    const option = document.createElement("option");
+    option.value = snap._id;
+    option.textContent = formatSnapLabel(snap);
+    fragment.append(option);
+  });
+  elements.snapSelect.replaceChildren(fragment);
+  if (selectedId && sorted.some((snap) => snap._id === selectedId)) {
+    elements.snapSelect.value = selectedId;
+  } else if (sorted.length > 0) {
+    elements.snapSelect.value = sorted[0]._id;
+  }
+  return elements.snapSelect.value;
 }
 
 function updateSnapshotName(payload, items) {
@@ -1011,11 +1068,70 @@ function limitAnalysisRows(rows) {
   return rows.slice(0, Number(limit));
 }
 
+function limitAnalysisItems(items) {
+  const limit = elements.analysisLimitSelect.value;
+  if (limit === "all") return items;
+  return items.slice(0, Number(limit));
+}
+
 function updateAnalysisMetrics(items, grandTotal) {
   elements.analysisMetricSteps.textContent = formatNumber(items.length);
   elements.analysisMetricOrders.textContent = formatNumber(grandTotal.orders.size);
   elements.analysisMetricMachines.textContent = formatNumber(grandTotal.machines.size);
   elements.analysisMetricHours.textContent = formatMeasure(grandTotal.hours, "hours");
+}
+
+function getStepQuantity(step) {
+  const value =
+    step.quantidade ??
+    step.quantity ??
+    step.qtd ??
+    step.qty ??
+    step.quant ??
+    step.quantidade_pedido ??
+    step.orderQuantity ??
+    step.order_quantity;
+  if (value === undefined || value === null || value === "") return "-";
+  return Number.isFinite(Number(value)) ? formatNumber(Number(value)) : String(value);
+}
+
+function getStepStatus(step) {
+  if (step.status) return String(step.status);
+  const now = Date.now();
+  if (now < step.start) return "Nao iniciada";
+  if (now <= step.end) return "Em andamento";
+  return "Finalizada";
+}
+
+function sortAnalysisOperations(items) {
+  const sortMode = elements.analysisSortSelect.value;
+  return [...items].sort((a, b) => {
+    if (sortMode === "label") {
+      return (
+        a.resourceSectorName.localeCompare(b.resourceSectorName, "pt-BR", { numeric: true }) ||
+        a.equipmentName.localeCompare(b.equipmentName, "pt-BR", { numeric: true }) ||
+        a.operation.localeCompare(b.operation, "pt-BR", { numeric: true }) ||
+        a.start - b.start
+      );
+    }
+    return (
+      a.start - b.start ||
+      a.resourceSectorName.localeCompare(b.resourceSectorName, "pt-BR", { numeric: true }) ||
+      a.equipmentName.localeCompare(b.equipmentName, "pt-BR", { numeric: true })
+    );
+  });
+}
+
+function setAnalysisResultTab(tab) {
+  state.activeAnalysisResult = tab;
+  const isPivot = tab === "pivot";
+  elements.analysisPivotTabButton.classList.toggle("is-active", isPivot);
+  elements.analysisOperationsTabButton.classList.toggle("is-active", !isPivot);
+  elements.analysisPivotTabButton.setAttribute("aria-selected", String(isPivot));
+  elements.analysisOperationsTabButton.setAttribute("aria-selected", String(!isPivot));
+  elements.pivotResult.hidden = !isPivot;
+  elements.operationsResult.hidden = isPivot;
+  state.analysisExport = isPivot ? state.analysisPivotExport : state.analysisOperationsExport;
 }
 
 function renderAnalysisTable({ rows, columns, grandTotal, rowDimension, columnDimension, measure, totalRows }) {
@@ -1174,10 +1290,80 @@ function renderAnalysisTable({ rows, columns, grandTotal, rowDimension, columnDi
   exportRows.push(exportTotalRow);
 
   table.replaceChildren(thead, tbody, tfoot);
-  state.analysisExport = {
+  state.analysisPivotExport = {
     filename: `analise-${rowDimension}-por-${columnDimension}-${measure}.csv`,
     rows: exportRows
   };
+}
+
+function renderAnalysisOperationsTable({ items, totalItems }) {
+  const headers = [
+    "setor",
+    "equipamento",
+    "operacao",
+    "id roteiro",
+    "quantidade",
+    "tempo",
+    "inicio",
+    "fim",
+    "Status",
+    "data"
+  ];
+  const table = elements.operationsTable;
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  headers.forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headerRow.append(th);
+  });
+  thead.append(headerRow);
+
+  const tbody = document.createElement("tbody");
+  const exportRows = [headers];
+
+  items.forEach((step) => {
+    const row = [
+      step.resourceSectorName || "-",
+      step.equipmentName || step.equipment || "-",
+      step.operation || "-",
+      step.workflow || "-",
+      getStepQuantity(step),
+      formatDurationClock(step.end - step.start),
+      timeOnly.format(new Date(step.start)),
+      timeOnly.format(new Date(step.end)),
+      getStepStatus(step),
+      dateFull.format(new Date(step.start))
+    ];
+    const tr = document.createElement("tr");
+    row.forEach((value, index) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      td.title = value;
+      if ([3, 4, 5, 6, 7, 9].includes(index)) td.classList.add("is-numeric");
+      tr.append(td);
+    });
+    tbody.append(tr);
+    exportRows.push(row);
+  });
+
+  table.replaceChildren(thead, tbody);
+  state.analysisOperationsExport = {
+    filename: "analise-lista-operacoes.csv",
+    rows: exportRows
+  };
+
+  if (items.length < totalItems) {
+    const tfoot = document.createElement("tfoot");
+    const tr = document.createElement("tr");
+    tr.className = "is-total-row";
+    const td = document.createElement("td");
+    td.colSpan = headers.length;
+    td.textContent = `${formatNumber(items.length)} de ${formatNumber(totalItems)} operacoes exibidas`;
+    tr.append(td);
+    tfoot.append(tr);
+    table.append(tfoot);
+  }
 }
 
 function renderAnalysis() {
@@ -1192,22 +1378,34 @@ function renderAnalysis() {
 
   if (items.length === 0 || pivot.rows.length === 0) {
     state.analysisExport = null;
+    state.analysisPivotExport = null;
+    state.analysisOperationsExport = null;
     setAnalysisVisibility({ empty: true });
     return;
   }
 
   const visibleRows = limitAnalysisRows(pivot.rows);
+  const sortedOperations = sortAnalysisOperations(items);
+  const visibleOperations = limitAnalysisItems(sortedOperations);
   setAnalysisVisibility();
   renderAnalysisTable({ ...pivot, rows: visibleRows, totalRows: pivot.rows.length });
+  renderAnalysisOperationsTable({ items: visibleOperations, totalItems: sortedOperations.length });
 
   const rowLabel = analysisDimensionLabels[pivot.rowDimension] || "Linha";
   const columnLabel = pivot.columnDimension === "none" ? "sem coluna" : analysisDimensionLabels[pivot.columnDimension];
   const measureLabel = getAnalysisMeasures(pivot.measure)
     .map((item) => item.label)
     .join(", ");
-  elements.analysisCaption.textContent = `${measureLabel} por ${rowLabel} x ${columnLabel} | ${formatNumber(
-    visibleRows.length
-  )} de ${formatNumber(pivot.rows.length)} linhas | ${formatNumber(items.length)} processos filtrados`;
+  if (state.activeAnalysisResult === "operations") {
+    elements.analysisCaption.textContent = `Lista das operacoes/processos | ${formatNumber(
+      visibleOperations.length
+    )} de ${formatNumber(sortedOperations.length)} linhas | ${formatNumber(items.length)} processos filtrados`;
+  } else {
+    elements.analysisCaption.textContent = `${measureLabel} por ${rowLabel} x ${columnLabel} | ${formatNumber(
+      visibleRows.length
+    )} de ${formatNumber(pivot.rows.length)} linhas | ${formatNumber(items.length)} processos filtrados`;
+  }
+  setAnalysisResultTab(state.activeAnalysisResult);
 }
 
 function exportAnalysisCsv() {
@@ -1566,6 +1764,14 @@ const debouncedAnalysis = debounce(() => renderAnalysis());
 
 elements.scheduleViewButton.addEventListener("click", () => setView("schedule"));
 elements.analysisViewButton.addEventListener("click", () => setView("analysis"));
+elements.analysisPivotTabButton.addEventListener("click", () => {
+  state.activeAnalysisResult = "pivot";
+  renderAnalysis();
+});
+elements.analysisOperationsTabButton.addEventListener("click", () => {
+  state.activeAnalysisResult = "operations";
+  renderAnalysis();
+});
 elements.searchInput.addEventListener("input", debouncedFilters);
 [
   elements.typeFilter,
@@ -1593,14 +1799,10 @@ elements.analysisExportButton.addEventListener("click", exportAnalysisCsv);
 elements.visibleDaysSelect.addEventListener("change", () => {
   render({ resetScroll: false });
 });
-elements.snapIdInput.addEventListener("input", (event) => {
-  syncSnapUi(event.target.value.trim());
+elements.snapSelect.addEventListener("change", () => {
+  loadData(elements.snapSelect.value.trim());
 });
-elements.snapIdInput.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  loadData(elements.snapIdInput.value.trim());
-});
-elements.refreshButton.addEventListener("click", () => loadData(elements.snapIdInput.value.trim()));
+elements.refreshButton.addEventListener("click", () => loadData(elements.snapSelect.value.trim()));
 elements.gantt.addEventListener("scroll", () => {
   if (state.scrollFrame) return;
   state.scrollFrame = window.requestAnimationFrame(() => {
@@ -1652,12 +1854,23 @@ window.addEventListener(
   }, 120)
 );
 
-loadConfig()
-  .then((config) => {
-    syncSnapUi(config.snapId || "");
-    return loadData(config.snapId);
-  })
-  .catch(() => {
-    syncSnapUi("");
-    loadData();
-  });
+async function init() {
+  try {
+    const [snapsPayload, config] = await Promise.all([loadSnaps(), loadConfig()]);
+    const snaps = snapsPayload?.items || [];
+    const fallbackId = config?.snapId || "";
+    const selectedId = fillSnapSelect(snaps, fallbackId);
+    syncSnapUi(selectedId);
+    await loadData(selectedId);
+  } catch (error) {
+    elements.snapSelect.replaceChildren();
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Erro ao carregar snapshots";
+    elements.snapSelect.append(option);
+    setVisibility({ error: error.message });
+    setAnalysisVisibility({ error: error.message });
+  }
+}
+
+init();

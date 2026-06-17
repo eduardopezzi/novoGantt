@@ -27,6 +27,34 @@ function send(res, status, body, type = "text/plain; charset=utf-8") {
   res.end(body);
 }
 
+async function proxySnapsList(_req, res) {
+  const upstream = `${API_BASE}/snaps/?search=&page=1&size=9999`;
+
+  try {
+    const response = await fetch(upstream, {
+      headers: { accept: "application/json" }
+    });
+    const body = await response.text();
+    send(
+      res,
+      response.status,
+      body,
+      response.headers.get("content-type") || "application/json; charset=utf-8"
+    );
+  } catch (error) {
+    send(
+      res,
+      502,
+      JSON.stringify({
+        error: "Nao foi possivel buscar a lista de snapshots.",
+        detail: error.message,
+        upstream
+      }),
+      "application/json; charset=utf-8"
+    );
+  }
+}
+
 async function proxySnap(req, res) {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
   const page = requestUrl.searchParams.get("page") || "1";
@@ -121,6 +149,11 @@ async function serveStatic(req, res) {
 createServer((req, res) => {
   if (req.url?.startsWith("/api/config")) {
     proxyConfig(req, res);
+    return;
+  }
+
+  if (req.url?.startsWith("/api/snaps")) {
+    proxySnapsList(req, res);
     return;
   }
 

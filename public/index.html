@@ -17,7 +17,9 @@
         <div class="actions">
           <label class="field snap-field">
             <span>Snapshot</span>
-            <input id="snapIdInput" type="text" spellcheck="false" autocomplete="off" />
+            <select id="snapSelect">
+              <option value="">Carregando...</option>
+            </select>
           </label>
           <button id="scheduleViewButton" class="view-button is-active" type="button">Cronograma</button>
           <button id="analysisViewButton" class="view-button" type="button">Analise</button>
@@ -302,9 +304,20 @@
           <div id="analysisErrorState" class="state error" hidden></div>
           <div id="analysisEmptyState" class="state" hidden>Nenhum dado encontrado para a analise.</div>
           <div id="analysisResult" class="analysis-result" hidden>
+            <div class="analysis-tabs" role="tablist" aria-label="Resultados da analise">
+              <button id="analysisPivotTabButton" class="analysis-tab is-active" type="button" role="tab" aria-selected="true">
+                Tabela dinamica
+              </button>
+              <button id="analysisOperationsTabButton" class="analysis-tab" type="button" role="tab" aria-selected="false">
+                Lista das operacoes/processos
+              </button>
+            </div>
             <div id="analysisCaption" class="analysis-caption"></div>
-            <div class="pivot-scroll">
+            <div id="pivotResult" class="pivot-scroll">
               <table id="pivotTable" class="pivot-table"></table>
+            </div>
+            <div id="operationsResult" class="pivot-scroll" hidden>
+              <table id="operationsTable" class="pivot-table operations-table"></table>
             </div>
           </div>
         </section>
